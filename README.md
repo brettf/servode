@@ -37,13 +37,13 @@ with ServoProtocol as sp:
 ```
 
 ### From the command-line
-To read one servo:
+To read a register from one servo:
 ```
 $ ./servode.py read_register --sid 10
 2016-11-04 06:01:42,582|servode |INFO: Read register: 'present_position'
 2016-11-04 06:01:42,587|servode |INFO: Servo:10 value:497
 ```
-To read two servos:
+To read a register from two servos:
 ```
 $ ./servode.py read_register --sid 10 --sid 11
 2016-11-04 06:01:42,582|servode |INFO: Read register: 'present_position'
