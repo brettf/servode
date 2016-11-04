@@ -23,10 +23,10 @@ To connect a group of servos and write values to a register (example: `goal_posi
 ```python
 with ServoProtocol as sp:
     sg = ServoGroup()
-    sg['base'] = Servo(sp, stages.arm_servo_ids[0])
-    sg['elbow'] = Servo(sp, stages.arm_servo_ids[1])
-    sg['wrist'] = Servo(sp, stages.arm_servo_ids[2]),
-    sg['claw'] = Servo(sp, stages.arm_servo_ids[3])
+    sg['base'] = Servo(sp, 10)
+    sg['elbow'] = Servo(sp, 11)
+    sg['wrist'] = Servo(sp, 12),
+    sg['claw'] = Servo(sp, 13)
 
    sg.write("goal_position", [
         100,  # first servo value
