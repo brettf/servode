@@ -64,15 +64,17 @@ $ ./servode.py write_register goal_position 490 --sid 10 --sid 11
 ## Installation
 
 1. Download [Servode](https://github.com/lashex/servode/archive/master.zip)
-2. unzip Servode
+2. Un-zip Servode
 2. Download the latest [ROBOTIS SDK](https://github.com/ROBOTIS-GIT/DynamixelSDK/releases)
 3. Change to the directory where `servode.py` resides
 4. Un-tar the ROBOTIS SDK:
+
     ```
     #example
     tar -xvf ~/download/dir/of/DynamixelSDK-#.#.#.tar
     ```  
 5. Copy the dynamixel python functions to the directory where `servode.py` resides
+
     ```
     # example
     cp DynamixelSDK-#.#.#.tar/python/dynamixel_functions_py/dynamixel_functions.py .
