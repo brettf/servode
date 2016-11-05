@@ -21,7 +21,7 @@ with ServoProtocol() as sp:
 
 To connect a group of servos and write values to a register (example: `goal_positiom`):
 ```python
-with ServoProtocol as sp:
+with ServoProtocol() as sp:
     sg = ServoGroup()
     sg['base'] = Servo(sp, 10)
     sg['elbow'] = Servo(sp, 11)
