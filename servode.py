@@ -392,7 +392,7 @@ class ServoProtocol(object):
     A Pythonic implementation of a ServoProtocol.
     """
     def __init__(self, baud_rate=BAUDRATE_PERM, manufacturer='ROBOTIS',
-                 servo_type='AX-12'):
+                 servo_type='AX-12', protocol_version=PROTOCOL_V):
         """
 
         :param baud_rate:
@@ -407,6 +407,7 @@ class ServoProtocol(object):
                 servo_type))
         self.baud_rate = baud_rate
         self.manufacturer = manufacturer
+        self.protocol_version = protocol_version
         self.port_num = dxl.portHandler(DEVICENAME)
         dxl.packetHandler()  # Initialize PacketHandler Structs
 
@@ -447,18 +448,19 @@ class ServoProtocol(object):
             sid = servo
 
         log.debug("[factory_reset] Try reset:{0}".format(sid))
-        dxl.factoryReset(self.port_num, PROTOCOL_V, sid, 0x00)
-        if dxl.getLastTxRxResult(self.port_num,
-                                 PROTOCOL_V) != COMM_SUCCESS:
+        dxl.factoryReset(self.port_num, self.protocol_version, sid, 0x00)
+        if dxl.getLastTxRxResult(
+                self.port_num, self.protocol_version) != COMM_SUCCESS:
             log.error("[factory_reset] Aborted")
             dxl.printTxRxResult(
-                PROTOCOL_V,
-                dxl.getLastTxRxResult(self.port_num, PROTOCOL_V))
+                self.protocol_version,
+                dxl.getLastTxRxResult(self.port_num, self.protocol_version))
             return
-        elif dxl.getLastRxPacketError(self.port_num, PROTOCOL_V) != 0:
+        elif dxl.getLastRxPacketError(
+                self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
-                PROTOCOL_V,
-                dxl.getLastRxPacketError(self.port_num, PROTOCOL_V))
+                self.protocol_version,
+                dxl.getLastRxPacketError(self.port_num, self.protocol_version))
 
         # Wait for reset
         log.debug("[factory_reset] Wait for reset...")
@@ -477,17 +479,17 @@ class ServoProtocol(object):
             sid = servo
 
         dxl_model_number = dxl.pingGetModelNum(
-            self.port_num, PROTOCOL_V, sid)
+            self.port_num, self.protocol_version, sid)
 
         if dxl.getLastTxRxResult(self.port_num,
-                                 PROTOCOL_V) != COMM_SUCCESS:
+                                 self.protocol_version) != COMM_SUCCESS:
             dxl.printTxRxResult(
-                PROTOCOL_V,
-                dxl.getLastTxRxResult(self.port_num, PROTOCOL_V))
-        elif dxl.getLastRxPacketError(self.port_num, PROTOCOL_V) != 0:
+                self.protocol_version,
+                dxl.getLastTxRxResult(self.port_num, self.protocol_version))
+        elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
-                PROTOCOL_V,
-                dxl.getLastRxPacketError(self.port_num, PROTOCOL_V))
+                self.protocol_version,
+                dxl.getLastRxPacketError(self.port_num, self.protocol_version))
         return dxl_model_number
 
     def read_register(self, servo, register):
@@ -505,28 +507,28 @@ class ServoProtocol(object):
 
         if dxl_control[register]['comm_bytes'] == 1:
             value = dxl.read1ByteTxRx(
-                self.port_num, PROTOCOL_V, sid,
+                self.port_num, self.protocol_version, sid,
                 dxl_control[register]['address']
             )
         elif dxl_control[register]['comm_bytes'] == 2:
             value = dxl.read2ByteTxRx(
-                self.port_num, PROTOCOL_V, sid,
+                self.port_num, self.protocol_version, sid,
                 dxl_control[register]['address']
             )
 
         last_result = dxl.getLastTxRxResult(
-            self.port_num, PROTOCOL_V
+            self.port_num, self.protocol_version
         )
         if last_result != COMM_SUCCESS:
             dxl.printTxRxResult(
-                PROTOCOL_V,
-                dxl.getLastTxRxResult(self.port_num, PROTOCOL_V)
+                self.protocol_version,
+                dxl.getLastTxRxResult(self.port_num, self.protocol_version)
             )
             log.error("Communication unsuccessful:{0}".format(last_result))
-        elif dxl.getLastRxPacketError(self.port_num, PROTOCOL_V) != 0:
+        elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
-                PROTOCOL_V,
-                dxl.getLastRxPacketError(self.port_num, PROTOCOL_V)
+                self.protocol_version,
+                dxl.getLastRxPacketError(self.port_num, self.protocol_version)
             )
             log.error("Unknown error:{0}".format(last_result))
 
@@ -553,26 +555,26 @@ class ServoProtocol(object):
 
         if dxl_control[register]['comm_bytes'] == 1:
             dxl.write1ByteTxRx(
-                self.port_num, PROTOCOL_V, sid,
+                self.port_num, self.protocol_version, sid,
                 dxl_control[register]['address'], value)
         elif dxl_control[register]['comm_bytes'] == 2:
             dxl.write2ByteTxRx(
-                self.port_num, PROTOCOL_V, sid,
+                self.port_num, self.protocol_version, sid,
                 dxl_control[register]['address'], value)
 
         last_result = dxl.getLastTxRxResult(
-            self.port_num, PROTOCOL_V
+            self.port_num, self.protocol_version
         )
         if last_result != COMM_SUCCESS:
             dxl.printTxRxResult(
-                PROTOCOL_V,
-                dxl.getLastTxRxResult(self.port_num, PROTOCOL_V)
+                self.protocol_version,
+                dxl.getLastTxRxResult(self.port_num, self.protocol_version)
             )
             return False
-        elif dxl.getLastRxPacketError(self.port_num, PROTOCOL_V) != 0:
+        elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
-                PROTOCOL_V,
-                dxl.getLastRxPacketError(self.port_num, PROTOCOL_V)
+                self.protocol_version,
+                dxl.getLastRxPacketError(self.port_num, self.protocol_version)
             )
             return False
         else:
@@ -581,6 +583,31 @@ class ServoProtocol(object):
 
         return True
 
+    def bulk_write(self, write_blocks):
+        """
+
+        :param write_blocks: a list of lists structured as follows:
+         { "blocks": [
+            { "servo_id": servo_id_1, "register": register, "value": value },
+            { "servo_id": servo_id_2, "register": register, "value": value },
+            ...
+         ]
+        :return:
+        """
+        group_num = dxl.groupBulkWrite(self.port_num, self.protocol_version)
+        for block in write_blocks['blocks']:
+            sid = block['servo_id']
+            register = block['register']
+            value = block['value']
+            if dxl.groupBulkWriteAddParam(
+                    group_num, sid,
+                    dxl_control[register]['address'],
+                    dxl_control[register]['comm_bytes'],
+                    value,
+                    len(value)):
+                pass
+
+        dxl.groupBulkWriteTxPacket(group_num)
 
 def read_all_servo_registers(cli, servo_type='AX-12'):
     with ServoProtocol(servo_type=servo_type) as sp:
@@ -786,7 +813,7 @@ if __name__ == '__main__':
         'register', nargs='?', default='goal_position',
         help="The Servo register to write.")
     write_register_parser.add_argument(
-        'value', nargs='?', default='0',
+        'value', nargs='?', type=int,
         help="The value to write to the register.")
     write_register_parser.add_argument(
         '--sid', action='append', type=int,
