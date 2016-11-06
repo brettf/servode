@@ -520,17 +520,15 @@ class ServoProtocol(object):
             self.port_num, self.protocol_version
         )
         if last_result != COMM_SUCCESS:
-            dxl.printTxRxResult(
-                self.protocol_version,
-                dxl.getLastTxRxResult(self.port_num, self.protocol_version)
-            )
-            log.error("Communication unsuccessful:{0}".format(last_result))
+            dxl.printTxRxResult(self.protocol_version, last_result)
+            log.error("[read_register] Comm unsuccessful:{0}".format(
+                last_result))
         elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
                 self.protocol_version,
                 dxl.getLastRxPacketError(self.port_num, self.protocol_version)
             )
-            log.error("Unknown error:{0}".format(last_result))
+            log.error("[read_register]Unknown error:{0}".format(last_result))
 
         return value
 
@@ -583,31 +581,54 @@ class ServoProtocol(object):
 
         return True
 
-    def bulk_write(self, write_blocks):
+    def sync_write(self, register, value, servo_list):
         """
+        Write the same value to the same register, synchronously to every Servo
+        in the servo_list.
 
-        :param write_blocks: a list of lists structured as follows:
-         { "blocks": [
-            { "servo_id": servo_id_1, "register": register, "value": value },
-            { "servo_id": servo_id_2, "register": register, "value": value },
-            ...
-         ]
+        :param register:
+        :param value:
+        :param servo_list:
         :return:
         """
-        group_num = dxl.groupBulkWrite(self.port_num, self.protocol_version)
-        for block in write_blocks['blocks']:
-            sid = block['servo_id']
-            register = block['register']
-            value = block['value']
-            if dxl.groupBulkWriteAddParam(
-                    group_num, sid,
-                    dxl_control[register]['address'],
-                    dxl_control[register]['comm_bytes'],
-                    value,
-                    len(value)):
-                pass
+        group_num = dxl.groupSyncWrite(
+            self.port_num, self.protocol_version,
+            dxl_control[register]['address'],
+            dxl_control[register]['comm_bytes']
+        )
+        log.info("[sync_write] reg:'{0}' value:{1}".format(register, value))
+        log.info("[sync_write] servo_list:{0}".format(servo_list))
 
-        dxl.groupBulkWriteTxPacket(group_num)
+        for servo in servo_list:
+            if isinstance(servo, Servo):
+                sid = servo.servo_id
+            else:
+                sid = servo
+
+            add_parm = dxl.groupSyncWriteAddParam(
+                group_num, sid,
+                value,
+                dxl_control[register]['comm_bytes']
+            )
+
+            if add_parm is False:
+                log.error(
+                    "[sync_write] ERROR servo_id:{0} add register:{1}", sid)
+                return False
+            else:
+                log.debug("[sync_write] added param to sync write")
+
+        dxl.groupSyncWriteTxPacket(group_num)
+
+        last_result = dxl.getLastTxRxResult(
+            self.port_num, self.protocol_version
+        )
+        if last_result != COMM_SUCCESS:
+            dxl.printTxRxResult(self.protocol_version, last_result)
+            log.error("[sync_write] Comm unsuccessful:{0}".format(last_result))
+            return False
+        return True
+
 
 def read_all_servo_registers(cli, servo_type='AX-12'):
     with ServoProtocol(servo_type=servo_type) as sp:

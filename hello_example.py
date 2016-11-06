@@ -44,9 +44,25 @@ def hello_group(cli):
         ])
         print("[hello_group] wrote register:'goal_position' values")
 
+
+def hsw(cli):
+    print("[hello_sync_write] _begin_")
+    # use a with block and a ServoProtocol to enable simple cleanup of protocol
+    with ServoProtocol() as sp:
+        if cli.sid is not None:
+            sp.sync_write('torque_enable', 1, servo_list=cli.sid)
+            for sid in cli.sid:
+                print("[hello_sync_write] read torque_enable:{0}".format(
+                    sp.read_register(sid, 'torque_enable')))
+
+            sp.sync_write('torque_enable', 0, servo_list=cli.sid)
+            for sid in cli.sid:
+                print("[hello_sync_write] read torque_enable:{0}".format(
+                    sp.read_register(sid, 'torque_enable')))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Servo Protocol implementation and some common functions',
+        description='Servo Protocol implementation and some helper functions',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     subparsers = parser.add_subparsers()
@@ -69,6 +85,14 @@ if __name__ == '__main__':
         'hello_group',
         description='Basic example showing use of the Servo Group class.')
     hello_group_parser.set_defaults(func=hello_group)
+
+    hello_sync_write_parser = subparsers.add_parser(
+        'hello_sync_write',
+        description='Basic example showing use of sync_write operation.')
+    hello_sync_write_parser.add_argument(
+        '--sid', action='append', type=int,
+        help="A servo_id. [one or more arguments]")
+    hello_sync_write_parser.set_defaults(func=hsw)
 
     args = parser.parse_args()
     args.func(args)
