@@ -3,6 +3,9 @@ An ode to Python code that uses Servos ([ROBOTIS](https://github.com/ROBOTIS-GIT
 
 ## Usage
 ### As a library
+When using Servode as a library use a single ServoProtocol instance per 
+connected servo bus. One ServoProtocol can be shared across threads.
+
 To connect a Servo and read a register (example: `present_position`):
 ```python
 with ServoProtocol() as sp:
