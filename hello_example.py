@@ -60,6 +60,7 @@ def hsw(cli):
                 print("[hello_sync_write] read torque_enable:{0}".format(
                     sp.read_register(sid, 'torque_enable')))
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Servo Protocol implementation and some helper functions',
