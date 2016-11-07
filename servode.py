@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import time
 import logging
+import datetime
 import argparse
 import collections
 import dynamixel_functions as dxl
@@ -23,6 +24,8 @@ PROTOCOL_V = 1  # Set protocol version used with the Dynamixel AX-12
 # Default setting
 BAUDRATE_PERM = 1000000
 BAUDRATE_TEMP = 500000
+AX_12_TYPE = 'AX-12'
+MX_TYPE = 'MX'
 TRUE = 1
 FALSE = 0
 ON = 1
@@ -274,7 +277,7 @@ class Servo(object):
            register will be placed. Each value is stored with key 'register'.
         """
         super(Servo, self).__init__()
-        self.wheel = False
+        self._wheel_mode = False
         self.enable_torque = True
         self.servo_id = servo_id
         self.sp = sp
@@ -282,13 +285,18 @@ class Servo(object):
         log.debug("[Servo.__init__] read_cache:{0}".format(read_cache))
 
     def wheel_mode(self, enable=True):
+        if self._wheel_mode == enable:
+            return
+
         if enable:
             self.sp.write_register(self.servo_id, "cw_angle_limit", 0)
             self.sp.write_register(self.servo_id, "ccw_angle_limit", 0)
+            self._wheel_mode = True
             log.info("[wheel_mode] wrote enable=True registers")
         else:
             self.sp.write_register(self.servo_id, "cw_angle_limit", 4)
             self.sp.write_register(self.servo_id, "ccw_angle_limit", 42)
+            self._wheel_mode = False
             log.info("[wheel_mode] wrote enable=False registers")
 
     def wheel_speed(self, speed=512, cw=True):
@@ -344,6 +352,7 @@ class ServoGroup(object):
     def __init__(self):
         super(ServoGroup, self).__init__()
         self.servos = collections.OrderedDict()
+        self._wheel_mode = False
 
     def __len__(self):
         return len(self.servos)
@@ -361,7 +370,82 @@ class ServoGroup(object):
         dictrepr = self.servos.__repr__(self)
         return '%s(%s)'.format((type(self).__name__, dictrepr))
 
-    def write(self, register, values):
+    def _get_sp(self):
+        log.debug("[_get_sp] _begin_")
+        sp = None
+        for key in self.servos:
+            sp = self.servos[key].sp
+            break
+        return sp
+
+    @property
+    def servo_ids(self):
+        """
+        Get a list of the ids that are in this group.
+        :return: the list of ids
+        """
+        ids = list()
+        for key in self.servos:
+            ids.append(self.servos[key].servo_id)
+        return ids
+
+    def wheel_mode(self, enable=True):
+        if self._wheel_mode == enable:
+            return
+
+        if enable:
+            self.write("cw_angle_limit", 0)
+            self.write("ccw_angle_limit", 0)
+            self._wheel_mode = True
+            log.info("[ServoGroup.wheel_mode] wrote enable=True registers")
+        else:
+            self.write("cw_angle_limit", 4)
+            self.write("ccw_angle_limit", 42)
+            self._wheel_mode = False
+            log.info("[ServoGroup.wheel_mode] wrote enable=False registers")
+
+    def wheel_speed(self, speed=512, cw=True):
+        """
+        Set the Servo Group's wheel speed. If the group's servos are not in
+        wheel mode they will be placed into wheel mode.
+
+        :param speed: value between 0-1023
+        :param cw: True > clockwise or False > counter-clockwise
+        :return: None
+        """
+        if (0 <= speed <= 1023) is False:
+            raise ValueError("Invalid speed value:{0}".format(speed))
+
+        if not self._wheel_mode:
+            self.wheel_mode()
+
+        set_speed = speed
+        if cw is False:
+            set_speed = 1024 + speed
+
+        self.write("moving_speed", set_speed)
+        log.info("[ServoGroup.wheel_speed] wrote speed value:{0}".format(
+            set_speed))
+
+    def write(self, register, value):
+        """
+        Write the value into the register on all the servos in the group.
+
+        :param register: the register to write
+        :param value: the value to write to the register
+        :return: True if success, False if not
+        """
+        log.debug(
+            '[ServoGroup.write] register:{0} value:{1} servo count:{2}'.format(
+                register, value, len(self)))
+        sp = self._get_sp()
+        return sp.sync_write(
+            register=register,
+            value=value,
+            servo_list=self.servo_ids
+        )
+
+    def write_values(self, register, values):
         """
         Write the list of values to the register on every servo in the
         ServoGroup.
@@ -369,21 +453,24 @@ class ServoGroup(object):
         ServoGroup
 
         :param register:
-        :param values:
-        :return:
+        :param values: the list of values to write in servo order
+        :return: None
         """
         t = 0
-        log.debug('[ServoGroup.write] len(self):{0} len(values):{1}'.format(
-            len(self), len(values)))
+        log.debug(
+            '[ServoGroup.write_values] len(self):{0} len(values):{1}'.format(
+                len(self), len(values)))
 
         for servo in self.servos.values():
             if t < min(len(self), len(values)):
-                log.info("[ServoGroup.write] servo:{0} values[{1}]:{2}".format(
-                    servo, t, values[t]
-                ))
+                log.info(
+                    "[ServoGroup.write_values] servo:{0} values[{1}]:{2}".format(
+                        servo, t, values[t]
+                    ))
                 servo.write(register, values[t])
             else:
-                log.warn("[ServoGroup.write] more group members than values.")
+                log.warn(
+                    "[ServoGroup.write_values] more group members than values.")
             t += 1
 
 
@@ -392,7 +479,7 @@ class ServoProtocol(object):
     A Pythonic implementation of a ServoProtocol.
     """
     def __init__(self, baud_rate=BAUDRATE_PERM, manufacturer='ROBOTIS',
-                 servo_type='AX-12', protocol_version=PROTOCOL_V):
+                 servo_type=AX_12_TYPE, protocol_version=PROTOCOL_V):
         """
 
         :param baud_rate:
@@ -400,7 +487,7 @@ class ServoProtocol(object):
         :param servo_type:
         """
         super(ServoProtocol, self).__init__()
-        if servo_type == 'AX-12':
+        if servo_type == AX_12_TYPE:
             self.servo_type = servo_type
         else:
             raise NotImplementedError("servo_type:{0} not understood.".format(
@@ -481,11 +568,10 @@ class ServoProtocol(object):
         dxl_model_number = dxl.pingGetModelNum(
             self.port_num, self.protocol_version, sid)
 
-        if dxl.getLastTxRxResult(self.port_num,
-                                 self.protocol_version) != COMM_SUCCESS:
-            dxl.printTxRxResult(
-                self.protocol_version,
-                dxl.getLastTxRxResult(self.port_num, self.protocol_version))
+        last_result = dxl.getLastTxRxResult(self.port_num,
+                                            self.protocol_version)
+        if last_result != COMM_SUCCESS:
+            dxl.printTxRxResult(self.protocol_version, last_result)
         elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
             dxl.printRxPacketError(
                 self.protocol_version,
@@ -531,6 +617,131 @@ class ServoProtocol(object):
             log.error("[read_register]Unknown error:{0}".format(last_result))
 
         return value
+
+    def bulk_read(self, read_blocks):
+        """
+
+        :param read_blocks: a list of dicts in the following format which
+        describe which registers to read from which servos.
+         { "blocks": [
+                { "servo_id": sid, "register": register },
+                { "servo_id": sid, "register": register },
+                ...
+            ]
+         }
+        :return: new read_blocks dict now with values included.
+        { "blocks": [
+            { "servo_id": sid, "register": register,
+                "value": value, "ts": timestamp },
+            { "servo_id": sid, "register": register,
+                "value": value, "ts": timestamp },
+                ...
+            ]
+         }
+        """
+        if self.servo_type == AX_12_TYPE and \
+                self.protocol_version == PROTOCOL_V:
+            raise NotImplementedError("AX-12 Servos do not support bulk_read.")
+
+        response = {"blocks": []}
+        group_num = dxl.groupBulkRead(self.port_num, self.protocol_version)
+        log.info("[bulk_read] read group_num:{0}".format(group_num))
+
+        for block in read_blocks['blocks']:
+            # loop through blocks to add each as a param to the bulk_read group
+            sid = block['servo_id']
+            register = block['register']
+            last_result = dxl.groupBulkReadAddParam(
+                group_num, sid,
+                dxl_control[register]['address'],
+                dxl_control[register]['comm_bytes']
+            )
+            if last_result != 1:
+                err = "[bulk_read] add read param fail on servo_id:{0}".format(
+                        sid
+                    )
+                log.error(err)
+                raise IOError(err)
+
+        dxl.groupBulkReadTxRxPacket(group_num)
+        ts = datetime.datetime.now().isoformat()
+
+        last_result = dxl.getLastTxRxResult(self.port_num,
+                                            self.protocol_version)
+        if last_result != COMM_SUCCESS:
+            dxl.printTxRxResult(self.protocol_version, last_result)
+
+        for block in read_blocks['blocks']:
+            # loop through each block to see if the bulk result is available
+            sid = block['servo_id']
+            register = block['register']
+            last_result = dxl.groupBulkReadIsAvailable(
+                group_num, sid,
+                dxl_control[register]['address'],
+                dxl_control[register]['comm_bytes']
+            )
+            if last_result != 1:
+                err = "[bulk_read] bulk_read not available servo_id:{0}".format(
+                        sid
+                    )
+                log.error(err)
+                raise IOError(err)
+
+        blocks = list()
+        for block in read_blocks['blocks']:
+            sid = block['servo_id']
+            register = block['register']
+            val = dxl.groupBulkReadGetData(
+                group_num, sid,
+                dxl_control[register]['address'],
+                dxl_control[register]['comm_bytes']
+            )
+            blocks.append({
+                "servo_id": sid, "register": register,
+                "value": val, "ts": ts
+            })
+
+        response['blocks'] = blocks
+        return response
+
+
+        # group_num = dxl.groupSyncXXX(
+        #     self.port_num, self.protocol_version,
+        #     dxl_control[register]['address'],
+        #     dxl_control[register]['comm_bytes']
+        # )
+        # log.info("[sync_write] reg:'{0}' value:{1}".format(register, value))
+        # log.info("[sync_write] servo_list:{0}".format(servo_list))
+        #
+        # for servo in servo_list:
+        #     if isinstance(servo, Servo):
+        #         sid = servo.servo_id
+        #     else:
+        #         sid = servo
+        #
+        #     add_parm = dxl.groupSyncWriteAddParam(
+        #         group_num, sid,
+        #         value,
+        #         dxl_control[register]['comm_bytes']
+        #     )
+        #
+        #     if add_parm is False:
+        #         log.error(
+        #             "[sync_write] ERROR servo_id:{0} add register:{1}", sid)
+        #         return False
+        #     else:
+        #         log.debug("[sync_write] added param to sync write")
+        #
+        # dxl.groupSyncWriteTxPacket(group_num)
+        #
+        # last_result = dxl.getLastTxRxResult(
+        #     self.port_num, self.protocol_version
+        # )
+        # if last_result != COMM_SUCCESS:
+        #     dxl.printTxRxResult(self.protocol_version, last_result)
+        #     log.error("[sync_write] Comm unsuccessful:{0}".format(last_result))
+        #     return False
+        # return True
 
     def write_register(self, servo, register, value):
         """
