@@ -294,10 +294,13 @@ class Servo(object):
         return self._status
 
     def get_status(self, status_value=None):
-        if status_value == None:
-            return self._status
+        if len(self._status) > 0:
+            if not status_value:
+                return self._status
+            else:
+                return self._status[status_value]
         else:
-            return self._status[status_value]
+            return None
 
     def wheel_mode(self, enable=True):
         if self._wheel_mode == enable:
@@ -507,15 +510,15 @@ class ServoProtocol(object):
         "input_volt_error":  int('00000001', 2)
     }
 
-    def get_error_status_map(self):
+    def _get_error_status_map(self):
         # only support ROBOTIS, so simply return the ROBOTIS status for now.
         if self.manufacturer == ServoProtocol.ROBOTIS:
             return ServoProtocol.ROBOTIS_STATUS
 
-    def result_to_status(self, result_packet):
+    def _result_to_status(self, result_packet):
         log.debug("[result_to_status] result_packet:{0}".format(result_packet))
         status = dict()
-        status_map = self.get_error_status_map()
+        status_map = self._get_error_status_map()
         for key in status_map:
             log.debug("[result_to_status] checking result bit:{0}".format(
                 status_map[key]))
@@ -599,11 +602,13 @@ class ServoProtocol(object):
             if last_result != COMM_SUCCESS:
                 log.error("[factory_reset] Aborted")
                 dxl.printTxRxResult(self.protocol_version, last_result)
-            elif dxl.getLastRxPacketError(
-                    self.port_num, self.protocol_version) != 0:
-                dxl.printRxPacketError(
-                    self.protocol_version,
-                    dxl.getLastRxPacketError(self.port_num, self.protocol_version))
+
+            error_result = dxl.getLastRxPacketError(
+                self.port_num, self.protocol_version)
+            if error_result:
+                self._result_to_status(error_result)
+                dxl.printRxPacketError(self.protocol_version, error_result)
+                log.error("[factory_reset] Error:{0}".format(error_result))
 
         # Wait for reset
         log.debug("[factory_reset] Wait for reset...")
@@ -629,11 +634,15 @@ class ServoProtocol(object):
                                                 self.protocol_version)
             if last_result != COMM_SUCCESS:
                 dxl.printTxRxResult(self.protocol_version, last_result)
-            elif dxl.getLastRxPacketError(
-                    self.port_num, self.protocol_version) != 0:
-                dxl.printRxPacketError(
-                    self.protocol_version,
-                    dxl.getLastRxPacketError(self.port_num, self.protocol_version))
+                log.error(
+                    "[ping] Communication unsuccessful:{0}".format(last_result))
+
+            error_result = dxl.getLastRxPacketError(
+                self.port_num, self.protocol_version)
+            if error_result:
+                self._result_to_status(error_result)
+                dxl.printRxPacketError(self.protocol_version, error_result)
+                log.error("[ping] Error:{0}".format(error_result))
 
         return dxl_model_number
 
@@ -673,22 +682,19 @@ class ServoProtocol(object):
             last_result = dxl.getLastTxRxResult(
                 self.port_num, self.protocol_version
             )
-            if last_result == COMM_SUCCESS:
-                result['status'] = self.result_to_status(last_result)
-
             if last_result != COMM_SUCCESS:
                 dxl.printTxRxResult(self.protocol_version, last_result)
                 log.error("[read_register] Comm unsuccessful:{0}".format(
                     last_result))
-            elif dxl.getLastRxPacketError(
-                    self.port_num, self.protocol_version) != 0:
-                dxl.printRxPacketError(
-                    self.protocol_version,
-                    dxl.getLastRxPacketError(
-                        self.port_num, self.protocol_version)
-                )
-                log.error(
-                    "[read_register]Unknown error:{0}".format(last_result))
+
+            # Comms might be successful but we could still be in an error
+            # state. So, check for error packet after every read
+            error_result = dxl.getLastRxPacketError(
+                    self.port_num, self.protocol_version)
+            if error_result:
+                result['status'] = self._result_to_status(error_result)
+                dxl.printRxPacketError(self.protocol_version, error_result)
+                log.error("[read_register] Error:{0}".format(error_result))
 
         result['value'] = value
         return result
@@ -779,44 +785,6 @@ class ServoProtocol(object):
         response['blocks'] = blocks
         return response
 
-        # group_num = dxl.groupSyncXXX(
-        #     self.port_num, self.protocol_version,
-        #     dxl_control[register]['address'],
-        #     dxl_control[register]['comm_bytes']
-        # )
-        # log.info("[sync_write] reg:'{0}' value:{1}".format(register, value))
-        # log.info("[sync_write] servo_list:{0}".format(servo_list))
-        #
-        # for servo in servo_list:
-        #     if isinstance(servo, Servo):
-        #         sid = servo.servo_id
-        #     else:
-        #         sid = servo
-        #
-        #     add_parm = dxl.groupSyncWriteAddParam(
-        #         group_num, sid,
-        #         value,
-        #         dxl_control[register]['comm_bytes']
-        #     )
-        #
-        #     if add_parm is False:
-        #         log.error(
-        #             "[sync_write] ERROR servo_id:{0} add register:{1}", sid)
-        #         return False
-        #     else:
-        #         log.debug("[sync_write] added param to sync write")
-        #
-        # dxl.groupSyncWriteTxPacket(group_num)
-        #
-        # last_result = dxl.getLastTxRxResult(
-        #     self.port_num, self.protocol_version
-        # )
-        # if last_result != COMM_SUCCESS:
-        #     dxl.printTxRxResult(self.protocol_version, last_result)
-        #     log.error("[sync_write] Comm unsuccessful:{0}".format(last_result))
-        #     return False
-        # return True
-
     def write_register(self, servo, register, value):
         """
 
@@ -855,22 +823,19 @@ class ServoProtocol(object):
             last_result = dxl.getLastTxRxResult(
                 self.port_num, self.protocol_version
             )
-            log.debug(
-                "[write_register] servo id:{0} reg:'{1}' result:{2}".format(
-                    sid, register, last_result))
-
-            if last_result == COMM_SUCCESS:
-                result['status'] = self.result_to_status(last_result)
-
             if last_result != COMM_SUCCESS:
-                dxl.printTxRxResult(
-                    self.protocol_version,
-                    dxl.getLastTxRxResult(self.port_num, self.protocol_version)
-                )
-            elif dxl.getLastRxPacketError(self.port_num, self.protocol_version) != 0:
-                result['error'] = dxl.getLastRxPacketError(
+                dxl.printTxRxResult(self.protocol_version, last_result)
+                log.error("[write_register] Comm unsuccessful:{0}".format(
+                    last_result))
+
+            # Comms might be successful but we could still be in an error
+            # state. So, check for error packet after every read
+            error_result = dxl.getLastRxPacketError(
                     self.port_num, self.protocol_version)
-                dxl.printRxPacketError(self.protocol_version, result['error'])
+            if error_result:
+                result['status'] = self._result_to_status(error_result)
+                dxl.printRxPacketError(self.protocol_version, error_result)
+                log.error("[write_register] Error:{0}".format(error_result))
             else:
                 log.debug(
                     "[write_register] register:'{0}' written".format(register))
@@ -939,8 +904,10 @@ def read_all_servo_registers(cli, servo_type='AX-12'):
             value = s[register]
             log.info("Registry entry:'{0}' has value: {1}".format(
                 register, value))
-            log.info("Registry entry:'{0}' read has status: {1}".format(
-                register, s.get_status()))
+            stat = s.get_status()
+            if stat:
+                log.info("Registry entry:'{0}' read has status: {1}".format(
+                    register, stat))
 
 
 def wheel_test(cli):
