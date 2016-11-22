@@ -369,6 +369,7 @@ class ServoGroup(object):
     A Group of Servos that will remain in order while interacting with or
     iterating over them.
     """
+    POSITION_MARGIN = 50
 
     def __init__(self):
         super(ServoGroup, self).__init__()
@@ -388,8 +389,8 @@ class ServoGroup(object):
         return iter(self.servos)
 
     def __repr__(self):
-        dictrepr = self.servos.__repr__(self)
-        return '%s(%s)'.format((type(self).__name__, dictrepr))
+        dictrepr = self.servos.__repr__()
+        return '{0}({1})'.format(type(self).__name__, dictrepr)
 
     def _get_sp(self):
         log.debug("[_get_sp] _begin_")
@@ -493,6 +494,64 @@ class ServoGroup(object):
                 log.warn(
                     "[ServoGroup.write_values] more group members than values.")
             t += 1
+
+    def goal_position(self, goal_positions,
+                      block=False,
+                      should_run=None,
+                      margin=POSITION_MARGIN):
+        """
+
+        :param goal_positions: the list of goal position values to write in
+            servo order
+        :param block: Validate that present_position for each servo is within
+            `margin` of the goal position. Block until validation occurs.
+        :param should_run: `threading.Event` used to interrupt block if
+            necessary, will be cleared when goal position is met.
+        :param margin:
+        :return:
+        """
+        log.info("[goal_position] requested positions:{0}".format(
+            goal_positions))
+
+        self.write_values('goal_position', goal_positions)
+
+        event = should_run
+        if block is True and event is None:
+            log.info("[goal_position] using local event")
+            event = threading.Event()
+            event.clear()
+            event.set()
+
+        if block:
+            while event.is_set():
+                close = dict()
+                i = 0
+                for servo in self.servos:
+                    s = self.servos[servo]
+                    pos = s['present_position']
+                    goal = goal_positions[i]
+                    log.debug(
+                        "[goal_position] 'present_position' id:{0} is:{1}".format(
+                            s.servo_id, pos))
+
+                    horseshoes = margin + goal
+                    hand_grenades = goal - margin
+                    if hand_grenades < 0:
+                        hand_grenades = 0
+
+                    # we are close enough when servo position is between
+                    # horseshoes and hand grenades
+                    if horseshoes > pos > hand_grenades:
+                        close[servo] = pos
+                    i += 1
+
+                if len(close) == len(self.servos):
+                    # all servos close when the dict has a value per servo
+                    event.clear()
+
+                log.info("[goal_position] actual close positions:{0}".format(
+                    close))
+                time.sleep(0.5)
 
 
 class ServoProtocol(object):
@@ -690,11 +749,14 @@ class ServoProtocol(object):
             # Comms might be successful but we could still be in an error
             # state. So, check for error packet after every read
             error_result = dxl.getLastRxPacketError(
-                    self.port_num, self.protocol_version)
+                self.port_num, self.protocol_version)
             if error_result:
                 result['status'] = self._result_to_status(error_result)
                 dxl.printRxPacketError(self.protocol_version, error_result)
                 log.error("[read_register] Error:{0}".format(error_result))
+            else:
+                log.debug(
+                    "[read_register] error_result:{0}".format(error_result))
 
         result['value'] = value
         return result
@@ -831,7 +893,7 @@ class ServoProtocol(object):
             # Comms might be successful but we could still be in an error
             # state. So, check for error packet after every read
             error_result = dxl.getLastRxPacketError(
-                    self.port_num, self.protocol_version)
+                self.port_num, self.protocol_version)
             if error_result:
                 result['status'] = self._result_to_status(error_result)
                 dxl.printRxPacketError(self.protocol_version, error_result)
