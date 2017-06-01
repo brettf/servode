@@ -10,14 +10,10 @@ import threading
 import collections
 import dynamixel_functions as dxl
 
-log = logging.getLogger('servode')
+__version__ = '0.1.0'
+
+log = logging.getLogger('servode').addHandler(logging.NullHandler())
 # logging.basicConfig(datefmt='%(asctime)s - %(name)s:%(levelname)s: %(message)s')
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    '%(asctime)s|%(name)-8s|%(levelname)s: %(message)s')
-handler.setFormatter(formatter)
-log.addHandler(handler)
-log.setLevel(logging.INFO)
 
 # Protocol version
 PROTOCOL_V = 1  # Set protocol version used with the Dynamixel AX-12
@@ -1078,6 +1074,13 @@ def torque_enable(cli):
 
 
 if __name__ == '__main__':
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s|%(name)-8s|%(levelname)s: %(message)s')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+
     parser = argparse.ArgumentParser(
         description='Servo Protocol implementation and some common functions',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
